@@ -1,4 +1,5 @@
 
+import numpy as np
 from queue import Queue
 from threading import Thread
 
@@ -9,9 +10,12 @@ from msckf import MSCKF
 
 
 class VIO(object):
-    def __init__(self, config, img_queue, imu_queue, viewer=None):
+    def __init__(self, config, img_queue, imu_queue, viewer=None, result_file=None):
         self.config = config
         self.viewer = viewer
+        ###
+        self.result_file = result_file
+        ###
 
         self.img_queue = img_queue
         self.imu_queue = imu_queue
@@ -57,12 +61,53 @@ class VIO(object):
         while True:
             feature_msg = self.feature_queue.get()
             if feature_msg is None:
+                ###
+                if self.result_file is not None:
+                    self.result_file.close()
+                ###
                 return
             print('feature_msg', feature_msg.timestamp)
             result = self.msckf.feature_callback(feature_msg)
 
             if result is not None and self.viewer is not None:
                 self.viewer.update_pose(result.cam0_pose)
+
+            ###
+            if result is not None and self.result_file is not None:
+                t = result.timestamp
+                p = result.pose.t          # position in world frame (metres)
+                # pose.R is R_world_body; convert to quaternion [x,y,z,w] Hamilton
+                R = result.pose.R
+                tr = np.trace(R)
+                if tr > 0:
+                    s = 0.5 / np.sqrt(tr + 1.0)
+                    qw = 0.25 / s
+                    qx = (R[2,1] - R[1,2]) * s
+                    qy = (R[0,2] - R[2,0]) * s
+                    qz = (R[1,0] - R[0,1]) * s
+                elif R[0,0] > R[1,1] and R[0,0] > R[2,2]:
+                    s = 2.0 * np.sqrt(1.0 + R[0,0] - R[1,1] - R[2,2])
+                    qw = (R[2,1] - R[1,2]) / s
+                    qx = 0.25 * s
+                    qy = (R[0,1] + R[1,0]) / s
+                    qz = (R[0,2] + R[2,0]) / s
+                elif R[1,1] > R[2,2]:
+                    s = 2.0 * np.sqrt(1.0 + R[1,1] - R[0,0] - R[2,2])
+                    qw = (R[0,2] - R[2,0]) / s
+                    qx = (R[0,1] + R[1,0]) / s
+                    qy = 0.25 * s
+                    qz = (R[1,2] + R[2,1]) / s
+                else:
+                    s = 2.0 * np.sqrt(1.0 + R[2,2] - R[0,0] - R[1,1])
+                    qw = (R[1,0] - R[0,1]) / s
+                    qx = (R[0,2] + R[2,0]) / s
+                    qy = (R[1,2] + R[2,1]) / s
+                    qz = 0.25 * s
+                self.result_file.write(
+                    f'{t:.9f} {p[0]:.6f} {p[1]:.6f} {p[2]:.6f} '
+                    f'{qx:.6f} {qy:.6f} {qz:.6f} {qw:.6f}\n')
+                self.result_file.flush()
+            ###
         
 
 
@@ -71,18 +116,20 @@ if __name__ == '__main__':
     import argparse
 
     from dataset import EuRoCDataset, DataPublisher
-    from viewer import Viewer
+    #from viewer import Viewer
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--path', type=str, default='path/to/your/EuRoC_MAV_dataset/MH_01_easy', 
+    ###
+    parser.add_argument('--path', type=str, default='../Data/MH_01_easy',
         help='Path of EuRoC MAV dataset.')
+    ###
     parser.add_argument('--view', action='store_true', help='Show trajectory.')
     args = parser.parse_args()
 
-    if args.view:
-        viewer = Viewer()
-    else:
-        viewer = None
+    #if args.view:
+    #    viewer = Viewer()
+    #else:
+    viewer = None
 
     dataset = EuRoCDataset(args.path)
     dataset.set_starttime(offset=40.)   # start from static state
@@ -93,7 +140,13 @@ if __name__ == '__main__':
     # gt_queue = Queue()
 
     config = ConfigEuRoC()
-    msckf_vio = VIO(config, img_queue, imu_queue, viewer=viewer)
+    ###
+    import os
+    os.makedirs('../results', exist_ok=True)
+    result_file = open('../results/stamped_traj_estimate.txt', 'w')
+    result_file.write('# timestamp tx ty tz qx qy qz qw\n')
+    ###
+    msckf_vio = VIO(config, img_queue, imu_queue, viewer=viewer, result_file=result_file)
 
 
     duration = float('inf')

@@ -44,7 +44,11 @@ class GroundTruthReader(object):
                 data = self.parse(line)
                 if data.timestamp < self.starttime:
                     continue
-                yield data
+                ###
+                yield self.field(
+                    data.timestamp - self.starttime,
+                    data.p, data.q, data.v, data.bw, data.ba)
+                ###
 
 
 
@@ -76,7 +80,11 @@ class IMUDataReader(object):
                 data = self.parse(line)
                 if data.timestamp < self.starttime:
                     continue
-                yield data
+                ###
+                yield self.field(
+                    data.timestamp - self.starttime,
+                    data.angular_velocity, data.linear_acceleration)
+                ###
 
     def start_time(self):
         # return next(self).timestamp
@@ -149,7 +157,9 @@ class ImageReader(object):
         for i, timestamp in enumerate(self.timestamps):
             if timestamp < self.starttime:
                 continue
-            yield self.field(timestamp, self[i])
+            ###
+            yield self.field(timestamp - self.starttime, self[i])
+            ###
 
     def start_time(self):
         return self.timestamps[0]
@@ -178,7 +188,9 @@ class Stereo(object):
         return len(self.cam0)
 
     def start_time(self):
-        return self.cam0.starttime
+        ###
+        return self.cam0.start_time()   # was: self.cam0.starttime (attribute = -inf, not first timestamp)
+        ###
 
     def set_starttime(self, starttime):
         self.starttime = starttime
@@ -226,7 +238,11 @@ class EuRoCDataset(object):   # Stereo + IMU
 class DataPublisher(object):
     def __init__(self, dataset, out_queue, duration=float('inf'), ratio=1.): 
         self.dataset = dataset
-        self.dataset_starttime = dataset.starttime
+        ###
+        # self.dataset_starttime = dataset.starttime
+        # Timestamps are now normalised to start at 0, so reference is 0.
+        self.dataset_starttime = 0
+        ###
         self.out_queue = out_queue
         self.duration = duration
         self.ratio = ratio
@@ -275,15 +291,17 @@ class DataPublisher(object):
 if __name__ == '__main__':
     from queue import Queue
 
-    path = 'path/to/your/EuRoC Mav Dataset/MH_01_easy'
+    path = '../Data/MH_01_easy'
     dataset = EuRoCDataset(path)
-    dataset.set_starttime(offset=30)
+    dataset.set_starttime(offset=40)
 
     img_queue = Queue()
     imu_queue = Queue()
     gt_queue = Queue()
 
     duration = 1
+    
+
     imu_publisher = DataPublisher(
         dataset.imu, imu_queue, duration)
     img_publisher = DataPublisher(
