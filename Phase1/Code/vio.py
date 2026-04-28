@@ -5,13 +5,18 @@ from threading import Thread
 from config import ConfigEuRoC
 from image import ImageProcessor
 from msckf import MSCKF
+from utils import to_quaternion
 
 
 
 class VIO(object):
-    def __init__(self, config, img_queue, imu_queue, viewer=None):
+    def __init__(self, config, img_queue, imu_queue, viewer=None, traj_file=None):
         self.config = config
         self.viewer = viewer
+        self.traj_file = None
+        if traj_file is not None:
+            self.traj_file = open(traj_file, 'w')
+            self.traj_file.write('# timestamp tx ty tz qx qy qz qw\n')
 
         self.img_queue = img_queue
         self.imu_queue = imu_queue
@@ -61,8 +66,16 @@ class VIO(object):
             print('feature_msg', feature_msg.timestamp)
             result = self.msckf.feature_callback(feature_msg)
 
-            if result is not None and self.viewer is not None:
-                self.viewer.update_pose(result.cam0_pose)
+            if result is not None:
+                if self.viewer is not None:
+                    self.viewer.update_pose(result.cam0_pose)
+                if self.traj_file is not None:
+                    t = result.pose.t
+                    q = to_quaternion(result.pose.R)
+                    self.traj_file.write(
+                        f'{result.timestamp:.9f} {t[0]:.6f} {t[1]:.6f} {t[2]:.6f} '
+                        f'{q[0]:.6f} {q[1]:.6f} {q[2]:.6f} {q[3]:.6f}\n')
+                    self.traj_file.flush()
         
 
 
@@ -74,9 +87,11 @@ if __name__ == '__main__':
     from viewer import Viewer
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--path', type=str, default='path/to/your/EuRoC_MAV_dataset/MH_01_easy', 
+    parser.add_argument('--path', type=str, default='../Data/MH_01_easy', 
         help='Path of EuRoC MAV dataset.')
     parser.add_argument('--view', action='store_true', help='Show trajectory.')
+    parser.add_argument('--save-traj', type=str, default='../results/trajectory.txt',
+        help='Path to save estimated trajectory ')
     args = parser.parse_args()
 
     if args.view:
@@ -93,7 +108,8 @@ if __name__ == '__main__':
     # gt_queue = Queue()
 
     config = ConfigEuRoC()
-    msckf_vio = VIO(config, img_queue, imu_queue, viewer=viewer)
+    msckf_vio = VIO(config, img_queue, imu_queue, viewer=viewer,
+        traj_file=args.save_traj)
 
 
     duration = float('inf')

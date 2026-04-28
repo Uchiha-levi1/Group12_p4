@@ -8,11 +8,11 @@ class OptimizationConfigEuRoC(object):
     """
     def __init__(self):
         self.translation_threshold = -1.0  # 0.2
-        self.huber_epsilon = 0.01
+        self.huber_epsilon = 0.
         self.estimation_precision = 5e-7
         self.initial_damping = 1e-3
-        self.outer_loop_max_iteration = 5 # 10
-        self.inner_loop_max_iteration = 5 # 10
+        self.outer_loop_max_iteration = 10
+        self.inner_loop_max_iteration = 10
 
 class ConfigEuRoC(object):
     def __init__(self):
@@ -54,14 +54,14 @@ class ConfigEuRoC(object):
         self.frame_rate = 20
 
         # Maximum number of camera states to be stored
-        self.max_cam_state_size = 20
+        self.max_cam_state_size = 30
 
         # The position uncertainty threshold is used to determine
         # when to reset the system online. Otherwise, the ever-increaseing
         # uncertainty will make the estimation unstable.
         # Note this online reset will be some dead-reckoning.
         # Set this threshold to nonpositive to disable online reset.
-        self.position_std_threshold = 8.0
+        self.position_std_threshold = -1
 
         # Threshold for determine keyframes
         self.rotation_threshold = 0.2618
@@ -69,10 +69,10 @@ class ConfigEuRoC(object):
         self.tracking_rate_threshold = 0.5
 
         # Noise related parameters (Use variance instead of standard deviation)
-        self.gyro_noise = 0.005 ** 2
-        self.acc_noise = 0.05 ** 2
-        self.gyro_bias_noise = 0.001 ** 2
-        self.acc_bias_noise = 0.01 ** 2
+        self.gyro_noise = 0.01 ** 2           # was 0.005 ** 2
+        self.acc_noise = 0.1 ** 2             # was 0.05 ** 2
+        self.gyro_bias_noise = 0.002 ** 2     # was 0.001 ** 2
+        self.acc_bias_noise = 0.1 ** 2       # was 0.01 ** 2
         self.observation_noise = 0.035 ** 2
 
         # initial state
@@ -81,9 +81,9 @@ class ConfigEuRoC(object):
         # The initial covariance of orientation and position can be
         # set to 0. But for velocity, bias and extrinsic parameters, 
         # there should be nontrivial uncertainty.
-        self.velocity_cov = 0.25
-        self.gyro_bias_cov = 0.01
-        self.acc_bias_cov = 0.01
+        self.velocity_cov = 0.5
+        self.gyro_bias_cov = 0.05
+        self.acc_bias_cov = 0.1
         self.extrinsic_rotation_cov = 3.0462e-4
         self.extrinsic_translation_cov = 2.5e-5
 
