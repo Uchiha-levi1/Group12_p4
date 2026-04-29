@@ -1,29 +1,34 @@
 ---
+
 name: Phase2 Implementation Plan
 overview: "Implement a full Phase 2 deep VIO pipeline in PyTorch: synthetic data generation in Blender, paired image+IMU dataset creation, three model variants (vision-only, IMU-only, visual-inertial), and evaluation via dead-reckoned trajectories with error metrics and plots."
 todos:
-  - id: audit-scaffold
-    content: Map current src_blender stubs to required Phase 2 outputs and lock target folder structure.
-    status: pending
-  - id: implement-data-gen
-    content: "Implement Blender sequence generation: trajectories, rendering, intrinsics export, IMU synthesis."
-    status: pending
-  - id: build-learning-data
-    content: Create pair-window builder and PyTorch dataset/dataloader for image-pair and IMU-window supervision.
-    status: pending
-  - id: implement-models
-    content: "Implement and train three models: vision-only, IMU-only, and visual-inertial fusion."
-    status: pending
-  - id: evaluate-and-doc
-    content: Implement dead-reckoning, metrics/plots, and complete beginner-friendly documentation with run steps.
-    status: pending
+
+- id: audit-scaffold
+content: Map current src_blender stubs to required Phase 2 outputs and lock target folder structure.
+status: pending
+- id: implement-data-gen
+content: "Implement Blender sequence generation: trajectories, rendering, intrinsics export, IMU synthesis."
+status: pending
+- id: build-learning-data
+content: Create pair-window builder and PyTorch dataset/dataloader for image-pair and IMU-window supervision.
+status: pending
+- id: implement-models
+content: "Implement and train three models: vision-only, IMU-only, and visual-inertial fusion."
+status: pending
+- id: evaluate-and-doc
+content: Implement dead-reckoning, metrics/plots, and complete beginner-friendly documentation with run steps.
+status: pending
 isProject: false
+
 ---
 
 # Phase 2 Implementation Plan
 
 ## Goal
+
 Build a complete, reproducible Phase 2 system that:
+
 - generates realistic synthetic down-facing camera + IMU sequences in Blender,
 - trains three relative-pose models (vision-only, IMU-only, visual-inertial),
 - evaluates by dead-reckoning and trajectory error metrics,
@@ -32,13 +37,15 @@ Build a complete, reproducible Phase 2 system that:
 ## What is already done vs missing
 
 ### Already present (scaffold)
-- [`/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/blender.py`](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/blender.py): scene loop, camera frame scheduling, pose CSV writer stub.
-- [`/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/intrinsics.py`](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/intrinsics.py): intrinsics API shape defined, math notes included.
-- [`/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/materials.py`](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/materials.py): material helper function stubs.
-- [`/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/imu_sim.py`](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/imu_sim.py): IMU API shape present.
-- [`/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/trajectories.py`](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/trajectories.py): trajectory module placeholder.
+
+- `[/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/blender.py](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/blender.py)`: scene loop, camera frame scheduling, pose CSV writer stub.
+- `[/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/intrinsics.py](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/intrinsics.py)`: intrinsics API shape defined, math notes included.
+- `[/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/materials.py](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/materials.py)`: material helper function stubs.
+- `[/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/imu_sim.py](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/imu_sim.py)`: IMU API shape present.
+- `[/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/trajectories.py](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/trajectories.py)`: trajectory module placeholder.
 
 ### Missing (to implement)
+
 - Actual Blender rendering + camera transform application.
 - Usable trajectory generators with bounded motion and angles.
 - IMU synthesis from trajectory/pose derivatives (with gravity handling + optional noise/bias).
@@ -68,13 +75,16 @@ flowchart TD
   metrics --> plots[PlotsAndSubmissionArtifacts]
 ```
 
+
+
 ## Recommended target file layout and low-level implementation plan
 
 ### 1) Blender data generation
 
-- **File:** [`/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/trajectories.py`](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/trajectories.py)
+- **File:** `[/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/trajectories.py](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/trajectories.py)`
 - **Purpose:** Deterministic, physically plausible trajectories with bounded roll/pitch (<45 deg) and realistic angular rates.
 - **Detailed pseudocode:**
+
 ```python
 # trajectory state at time t
 # return position p_wb(t), orientation q_wb(t), velocity v_wb(t), accel a_wb(t)
@@ -97,9 +107,10 @@ def figure8(t, cfg):
     return p_wb, q_wb, v_wb, a_wb
 ```
 
-- **File:** [`/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/materials.py`](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/materials.py)
+- **File:** `[/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/materials.py](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/materials.py)`
 - **Purpose:** Load floor textures and assign randomized scale/offset to avoid overfitting.
 - **Detailed pseudocode:**
+
 ```python
 def create_textured_floor(obj_plane, image_path, uv_scale):
     img = bpy.data.images.load(image_path)
@@ -111,9 +122,10 @@ def create_textured_floor(obj_plane, image_path, uv_scale):
     return mat
 ```
 
-- **File:** [`/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/intrinsics.py`](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/intrinsics.py)
+- **File:** `[/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/intrinsics.py](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/intrinsics.py)`
 - **Purpose:** Compute pinhole K once and export in metadata.
 - **Detailed pseudocode:**
+
 ```python
 def fx_fy_cx_cy_from_blender(camera, W, H):
     lens_mm = camera.lens
@@ -128,9 +140,10 @@ def fx_fy_cx_cy_from_blender(camera, W, H):
     return fx, fy, cx, cy
 ```
 
-- **File:** [`/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/imu_sim.py`](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/imu_sim.py)
+- **File:** `[/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/imu_sim.py](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/imu_sim.py)`
 - **Purpose:** Generate gyro/accel measurements at high rate between camera frames.
 - **Detailed pseudocode:**
+
 ```python
 def generate_imu_from_states(states, imu_rate, sigma_g, sigma_a):
     # states: time-indexed pose, vel, world-acc
@@ -147,9 +160,10 @@ def generate_imu_from_states(states, imu_rate, sigma_g, sigma_a):
         write imu row: t_ns, wx, wy, wz, ax, ay, az
 ```
 
-- **File:** [`/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/blender.py`](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/blender.py)
+- **File:** `[/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/blender.py](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/src_blender/blender.py)`
 - **Purpose:** End-to-end sequence generator and disk exporter.
 - **Detailed pseudocode:**
+
 ```python
 def run_demo(output_dir, duration, imu_rate, cam_rate, seed):
     setup_scene(engine='EEVEE', resolution=(640,480))
@@ -176,9 +190,10 @@ def run_demo(output_dir, duration, imu_rate, cam_rate, seed):
 
 ### 2) Dataset preparation for learning
 
-- **File (new):** [`/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/data/build_pairs.py`](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/data/build_pairs.py)
+- **File (new):** `[/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/data/build_pairs.py](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/data/build_pairs.py)`
 - **Purpose:** Convert raw sequences into supervised samples `(I_t, I_t+Delta, IMU[t:t+Delta], relative_pose)`.
 - **Detailed pseudocode:**
+
 ```python
 def build_pair_samples(seq_dir, cam_stride=10):
     imgs = load_sorted_images(seq_dir/cam0/data)
@@ -195,9 +210,10 @@ def build_pair_samples(seq_dir, cam_stride=10):
         save sample index with paths, imu window, rel pose label
 ```
 
-- **File (new):** [`/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/data/dataset.py`](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/data/dataset.py)
+- **File (new):** `[/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/data/dataset.py](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/data/dataset.py)`
 - **Purpose:** PyTorch `Dataset`/`DataLoader` wrappers with normalization and augmentation.
 - **Detailed pseudocode:**
+
 ```python
 class VIOPairDataset(torch.utils.data.Dataset):
     def __getitem__(idx):
@@ -210,9 +226,10 @@ class VIOPairDataset(torch.utils.data.Dataset):
 
 ### 3) Model implementations (three required networks)
 
-- **File (new):** [`/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/models/vision_only.py`](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/models/vision_only.py)
+- **File (new):** `[/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/models/vision_only.py](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/models/vision_only.py)`
 - **Purpose:** CNN-based image pair encoder and relative pose regressor.
 - **Detailed pseudocode:**
+
 ```python
 class VisionOnlyNet(nn.Module):
     # Siamese encoder + feature fusion + MLP head
@@ -224,9 +241,10 @@ class VisionOnlyNet(nn.Module):
         return pose
 ```
 
-- **File (new):** [`/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/models/imu_only.py`](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/models/imu_only.py)
+- **File (new):** `[/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/models/imu_only.py](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/models/imu_only.py)`
 - **Purpose:** 1D temporal IMU model (BiGRU/TCN) to estimate relative pose.
 - **Detailed pseudocode:**
+
 ```python
 class IMUOnlyNet(nn.Module):
     def forward(imu_seq):
@@ -235,9 +253,10 @@ class IMUOnlyNet(nn.Module):
         return pose
 ```
 
-- **File (new):** [`/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/models/vi_fusion.py`](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/models/vi_fusion.py)
+- **File (new):** `[/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/models/vi_fusion.py](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/models/vi_fusion.py)`
 - **Purpose:** Mid-level fusion of visual and inertial embeddings.
 - **Detailed pseudocode:**
+
 ```python
 class VIFusionNet(nn.Module):
     def forward(img0, img1, imu_seq):
@@ -250,9 +269,10 @@ class VIFusionNet(nn.Module):
 
 ### 4) Losses, training, and evaluation
 
-- **File (new):** [`/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/train/losses.py`](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/train/losses.py)
+- **File (new):** `[/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/train/losses.py](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/train/losses.py)`
 - **Purpose:** Relative pose loss with translation and rotation terms.
 - **Detailed pseudocode:**
+
 ```python
 def pose_loss(pred, gt, w_t=1.0, w_r=1.0):
     t_loss = L1(pred_t, gt_t)
@@ -260,9 +280,10 @@ def pose_loss(pred, gt, w_t=1.0, w_r=1.0):
     return w_t*t_loss + w_r*r_loss
 ```
 
-- **File (new):** [`/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/train/train.py`](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/train/train.py)
+- **File (new):** `[/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/train/train.py](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/train/train.py)`
 - **Purpose:** Unified trainer supporting all three model types.
 - **Detailed pseudocode:**
+
 ```python
 def train_one_config(model_type, cfg):
     build dataloaders
@@ -275,9 +296,10 @@ def train_one_config(model_type, cfg):
         validate and checkpoint best
 ```
 
-- **File (new):** [`/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/eval/dead_reckoning.py`](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/eval/dead_reckoning.py)
+- **File (new):** `[/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/eval/dead_reckoning.py](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/eval/dead_reckoning.py)`
 - **Purpose:** Compose relative transforms to recover global trajectory.
 - **Detailed pseudocode:**
+
 ```python
 def integrate_relative_poses(rel_poses, T0=np.eye(4)):
     T = T0
@@ -288,9 +310,10 @@ def integrate_relative_poses(rel_poses, T0=np.eye(4)):
     return traj
 ```
 
-- **File (new):** [`/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/eval/metrics.py`](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/eval/metrics.py)
+- **File (new):** `[/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/eval/metrics.py](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/eval/metrics.py)`
 - **Purpose:** ATE RMSE (with optional SE(3) alignment), RPE, and trajectory plots.
 - **Detailed pseudocode:**
+
 ```python
 def ate_rmse(pred_xyz, gt_xyz, align=True):
     if align:
@@ -298,20 +321,20 @@ def ate_rmse(pred_xyz, gt_xyz, align=True):
     return sqrt(mean(sum((pred_xyz - gt_xyz)^2, axis=1)))
 ```
 
-- **File (new):** [`/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/eval/plot_results.py`](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/eval/plot_results.py)
+- **File (new):** `[/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/eval/plot_results.py](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/eval/plot_results.py)`
 - **Purpose:** Generate comparison figures required in report.
 
 ### 5) Configuration and reproducibility
 
-- **File (new):** [`/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/config/default.yaml`](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/config/default.yaml)
+- **File (new):** `[/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/config/default.yaml](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/Code/config/default.yaml)`
 - **Purpose:** Central settings for render rates, model hyperparameters, and train/eval paths.
-
-- **File (new):** [`/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/README.md`](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/README.md)
+- **File (new):** `[/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/README.md](/Users/myrrh/Documents/source/repos/Group12_p4/Phase2/README.md)`
 - **Purpose:** Exact commands for data generation, training each model, and evaluation.
 
 ## Key concepts documentation (beginner-focused)
 
 ### Blender essentials for this project
+
 - **Scene graph:** objects (camera, plane, lights) live in world coordinates; camera pose is `matrix_world`.
 - **Coordinate frames:** define and document `world`, `body/camera`, and IMU frames clearly before coding any math.
 - **Camera model in Blender:** lens (mm), sensor size, and shifts map to pinhole intrinsics `(fx, fy, cx, cy)`.
@@ -320,8 +343,9 @@ def ate_rmse(pred_xyz, gt_xyz, align=True):
 - **Realism constraints:** bound acceleration/angular velocity and keep plane edges out of view.
 
 ### Blender documentation links (implementation-focused)
+
 - **Blender Python API index (start here):** [https://docs.blender.org/api/current/](https://docs.blender.org/api/current/)
-- **`bpy` module reference:** [https://docs.blender.org/api/current/bpy.html](https://docs.blender.org/api/current/bpy.html)
+- `**bpy` module reference:** [https://docs.blender.org/api/current/bpy.html](https://docs.blender.org/api/current/bpy.html)
 - **Scene and context (`bpy.context.scene`, active camera):** [https://docs.blender.org/api/current/bpy.context.html](https://docs.blender.org/api/current/bpy.context.html)
 - **Render settings (`scene.render`, filepath, resolution, FPS):** [https://docs.blender.org/api/current/bpy.types.RenderSettings.html](https://docs.blender.org/api/current/bpy.types.RenderSettings.html)
 - **Render operator (`bpy.ops.render.render`):** [https://docs.blender.org/api/current/bpy.ops.render.html](https://docs.blender.org/api/current/bpy.ops.render.html)
@@ -335,7 +359,127 @@ def ate_rmse(pred_xyz, gt_xyz, align=True):
 - **UV editing/data API (for texture scaling/tiling):** [https://docs.blender.org/api/current/bpy.types.MeshUVLoopLayer.html](https://docs.blender.org/api/current/bpy.types.MeshUVLoopLayer.html)
 - **Running Blender scripts from CLI (`--background --python`):** [https://docs.blender.org/manual/en/latest/advanced/command_line/arguments.html](https://docs.blender.org/manual/en/latest/advanced/command_line/arguments.html)
 
+### Blender step-by-step implementation plan (do this in order)
+
+#### Step 0: Environment and execution model
+
+- Decide one execution path and stick to it: run scripts via Blender CLI (`blender --background --python ...`) instead of manual GUI clicks.
+- Create a minimal runner command in your notes and verify it executes `print("hello")` from `blender.py`.
+- Confirm Python imports inside Blender for `bpy`, `mathutils`, `numpy` (if needed).
+- Keep all output paths configurable (`output_dir`, `seed`, `duration`, `imu_rate`, `cam_rate`) from CLI args.
+
+#### Step 1: Create deterministic scene reset
+
+- In `blender.py`, implement `reset_scene()` that removes previous objects/materials from the active scene.
+- Recreate only essentials: one camera, one plane, one light (or world illumination).
+- Set random seed at start (`random`, `numpy`) for reproducibility.
+- Add one smoke-check render to confirm pipeline writes a single png.
+
+#### Step 2: Configure camera and render pipeline
+
+- In `setup_scene`, set engine, resolution, FPS, color format, and output image format (`PNG`).
+- Create/locate camera object and make it scene active camera.
+- Force camera to look downward at floor; document the frame convention in comments.
+- Add helper `set_camera_pose(camera, pos, quat)` that writes `camera.location` and `camera.rotation_quaternion`.
+
+#### Step 3: Build textured floor correctly
+
+- In `materials.py`, implement image load with path existence checks and clear error messages.
+- Create node-based material:
+  - `TextureCoordinate -> Mapping -> ImageTexture -> PrincipledBSDF -> MaterialOutput`
+  - parameterize UV scale, rotation, and optional offset.
+- Assign material to plane and validate texture is visible in one test render.
+- Make plane large enough (e.g., 100m x 100m) so camera never sees edges.
+
+#### Step 4: Implement trajectory library with physics limits
+
+- In `trajectories.py`, implement at least:
+  - `figure8(t, cfg)`
+  - `circle(t, cfg)`
+  - `hover_with_yaw(t, cfg)`
+- Return full state at each `t`: position, quaternion, velocity, acceleration.
+- Enforce constraints:
+  - roll/pitch <= 45 degrees
+  - bounded linear acceleration
+  - bounded angular rate
+- Add a small numeric consistency check: finite-difference velocity should match analytic velocity approximately.
+
+#### Step 5: Integrate trajectory with render loop
+
+- In `blender.py` main loop:
+  - iterate at IMU `dt`
+  - evaluate state from trajectory
+  - apply camera pose each step
+  - render only when `t >= next_cam_t`
+- Name image files using nanosecond timestamps for deterministic sorting.
+- Export pose rows per rendered frame; keep strict timestamp match between image filename and pose row.
+
+#### Step 6: Export camera intrinsics/extrinsics metadata
+
+- In `intrinsics.py`, replace placeholder with real `fx, fy, cx, cy` computation from active camera.
+- Export `K` and image size once per sequence (`camera_info.json` or csv).
+- Define and export frame relation assumptions:
+  - `T_world_cam` convention
+  - any fixed `T_imu_cam` you assume
+- Add unit checks (focal lengths positive, principal point inside image bounds).
+
+#### Step 7: Implement IMU synthesis from states
+
+- In `imu_sim.py`, implement:
+  - gyro from orientation delta (`log(R_k^T R_k+1) / dt`)
+  - accelerometer specific force (`R^T (a_world - g_world)`)
+- Add optional white noise + random-walk bias toggles in config.
+- Output format: `timestamp, wx, wy, wz, ax, ay, az`.
+- Verify gravity sanity:
+  - near-hover should produce ~9.81 m/s^2 magnitude in accelerometer (depending on convention/sign).
+
+#### Step 8: Add sequence packaging and manifests
+
+- Save outputs in a consistent tree (example):
+  - `sequence_x/cam0/data/*.png`
+  - `sequence_x/imu0/data.csv`
+  - `sequence_x/groundtruth.csv`
+  - `sequence_x/camera_info.json`
+  - `sequence_x/manifest.json`
+- Include manifest fields: seed, rates, duration, trajectory type, texture path, camera params.
+- Keep one manifest per sequence for debugging and reproducibility.
+
+#### Step 9: Build Blender-only validation script
+
+- Add a small checker script that runs after generation:
+  - timestamps strictly increasing
+  - expected frame/imu counts within tolerance
+  - no missing files
+  - sample image can be loaded
+- Print a concise pass/fail summary for each sequence.
+
+#### Step 10: Scale to dataset generation
+
+- Create a loop over textures, heights, trajectories, and seeds to generate many sequences.
+- Use train/val/test split by sequence ID (not random frame-level split).
+- Ensure test textures/trajectories contain unseen combinations.
+- Keep generation presets:
+  - `quick_debug` (short, tiny dataset)
+  - `train_full` (large, diverse)
+
+#### Step 11: Common Blender pitfalls (avoid these early)
+
+- Quaternion order confusion (`wxyz` vs `xyzw`): define one project-wide convention and convert explicitly.
+- Coordinate frame confusion: write frame conventions in `README.md` and function docstrings.
+- Material node links not connected: validate by checking node tree links programmatically.
+- Hidden color-management changes between runs: lock render and color settings once in code.
+- Slow renders: start with low resolution and material preview-like settings, then scale up.
+
+#### Step 12: Definition of done for Blender portion
+
+- You can generate at least 3 different trajectory types with different textures/seeds.
+- Output includes synchronized `cam0`, `imu0`, pose GT, and camera metadata.
+- Checker script passes without warnings.
+- A short notebook/script can plot trajectory and IMU traces from exported files.
+- Dataset is directly consumable by your `build_pairs.py` without manual fixes.
+
 ### VIO/deep learning essentials
+
 - **Relative pose target:** model predicts transform from frame `t` to `t+Delta`.
 - **Temporal alignment:** IMU window must exactly cover timestamps between the two RGB frames.
 - **Dead-reckoning:** compose predicted relative transforms sequentially to obtain trajectory.
@@ -345,23 +489,24 @@ def ate_rmse(pred_xyz, gt_xyz, align=True):
 
 ## Detailed TODO checklist (current status)
 
-- [x] Phase 2 Blender module scaffolding exists in `src_blender`.
-- [ ] Implement trajectory library (`figure8`, circle, aggressive, hover) with derivative outputs.
-- [ ] Implement actual Blender render pipeline in `blender.py` (camera transform + png export).
-- [ ] Implement camera intrinsics extraction and save camera metadata.
-- [ ] Implement IMU simulator with gravity/body-frame conversion and noise options.
-- [ ] Add sequence-level manifest and deterministic seed handling.
-- [ ] Create train/val/test split tooling by sequence, not by individual frames.
-- [ ] Build PyTorch dataset class for `(img0, img1, imu_seq, rel_pose)`.
-- [ ] Implement `VisionOnlyNet` and baseline training.
-- [ ] Implement `IMUOnlyNet` and baseline training.
-- [ ] Implement `VIFusionNet` and fusion training.
-- [ ] Implement dead-reckoning and metric computation (ATE RMSE at minimum).
-- [ ] Generate required trajectory comparison plots for all three models.
-- [ ] Write Phase 2 README with full run commands and defaults.
-- [ ] Create report figures/tables and summarize findings/failure modes.
+- Phase 2 Blender module scaffolding exists in `src_blender`.
+- Implement trajectory library (`figure8`, circle, aggressive, hover) with derivative outputs.
+- Implement actual Blender render pipeline in `blender.py` (camera transform + png export).
+- Implement camera intrinsics extraction and save camera metadata.
+- Implement IMU simulator with gravity/body-frame conversion and noise options.
+- Add sequence-level manifest and deterministic seed handling.
+- Create train/val/test split tooling by sequence, not by individual frames.
+- Build PyTorch dataset class for `(img0, img1, imu_seq, rel_pose)`.
+- Implement `VisionOnlyNet` and baseline training.
+- Implement `IMUOnlyNet` and baseline training.
+- Implement `VIFusionNet` and fusion training.
+- Implement dead-reckoning and metric computation (ATE RMSE at minimum).
+- Generate required trajectory comparison plots for all three models.
+- Write Phase 2 README with full run commands and defaults.
+- Create report figures/tables and summarize findings/failure modes.
 
 ## Execution order (recommended)
+
 1. Finish Blender data generation and verify one short sequence manually.
 2. Build pairwise dataset + sanity plots (sample images, IMU traces, relative pose histograms).
 3. Train vision-only baseline first (easiest debugging path).
@@ -369,7 +514,9 @@ def ate_rmse(pred_xyz, gt_xyz, align=True):
 5. Run full evaluation and generate final artifacts for submission.
 
 ## Validation gates
+
 - **Data gate:** timestamps monotonic; IMU frequency near target; frame-IMU windows aligned.
 - **Model gate:** train loss decreases; validation does not diverge; outputs have plausible scales.
 - **Trajectory gate:** dead-reckoned path is smooth and approximately follows GT trend.
 - **Submission gate:** all required files and plots reproducible from README commands.
+
