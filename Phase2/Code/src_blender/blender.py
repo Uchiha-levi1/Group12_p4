@@ -12,6 +12,13 @@ THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 if THIS_DIR not in sys.path:
     sys.path.insert(0, THIS_DIR)
 
+PHASE2_ROOT = os.path.abspath(os.path.join(THIS_DIR, '..', '..'))
+DEFAULT_FLOOR_TEXTURE = os.path.join(
+    PHASE2_ROOT,
+    'static',
+    '502417451_24426942323561828_9163875266620398845_n.jpg',
+)
+
 try:
     from . import materials, intrinsics, trajectories
 except ImportError:
@@ -41,6 +48,24 @@ def parse_args(argv=None):
     parser.add_argument('--fps', type=int, default=100)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--smoke_test', action='store_true')
+
+    parser.add_argument(
+        '--floor_texture',
+        default=DEFAULT_FLOOR_TEXTURE,
+        help='Image path for floor diffuse texture',
+    )
+    parser.add_argument(
+        '--crop_uv',
+        nargs=4,
+        type=float,
+        metavar=('UMIN', 'VMIN', 'UMAX', 'VMAX'),
+        default=None,
+        help='Normalized UV crop u_min v_min u_max v_max (default: full image)',
+    )
+    parser.add_argument('--floor_size', type=float, default=100.0)
+    parser.add_argument('--uv_scale', nargs=2, type=float, default=[1.0, 1.0],
+                        metavar=('SX', 'SY'))
+    parser.add_argument('--uv_rotate_z', type=float, default=0.0)
     return parser.parse_args(user_argv)
 
 
@@ -72,13 +97,35 @@ def setup_scene(render_resolution=(640, 480), engine='BLENDER_EEVEE', fps=100):
 
 
 def ensure_camera(scene, location=(0.0, 0.0, 3.0), euler_xyz=(3.14159, 0.0, 0.0)):
-    """Create camera if needed and make it active."""
+    """Create camera if needed and make it active.
+
+    Convention: default Euler (pi, 0, 0) points the camera downward (−Z) at the XY floor plane.
+    """
     cam = next((obj for obj in scene.objects if obj.type == 'CAMERA'), None)
     if cam is None:
         bpy.ops.object.camera_add(location=location, rotation=euler_xyz)
         cam = bpy.context.active_object
     scene.camera = cam
     return cam
+
+
+def ensure_sun(scene, energy=3.0):
+    """Add a sun lamp so the textured floor is visible in EEVEE/Cycles smoke renders."""
+    existing = next((obj for obj in scene.objects if obj.type == 'LIGHT'), None)
+    if existing is not None:
+        return existing
+    bpy.ops.object.light_add(type='SUN', location=(10.0, -10.0, 20.0))
+    sun = bpy.context.active_object
+    sun.data.energy = energy
+    return sun
+
+
+def create_floor(name='Floor', size=100.0, location=(0.0, 0.0, 0.0)):
+    """Large ground plane in XY (matches downward-looking camera). Edge length ``size`` (meters)."""
+    bpy.ops.mesh.primitive_plane_add(size=size, location=location)
+    floor_obj = bpy.context.active_object
+    floor_obj.name = name
+    return floor_obj
 
 
 def set_camera_pose(camera, position, quaternion_xyzw):
@@ -93,6 +140,7 @@ def smoke_test_render(scene, camera, output_dir):
     """Render a single frame to validate pipeline wiring."""
     os.makedirs(output_dir, exist_ok=True)
     smoke_path = os.path.join(output_dir, "smoke_test.png")
+    # Quaternion xyzw: 180° about X => nadir view (+Z camera looks along −Z).
     set_camera_pose(camera, (0.0, 0.0, 3.0), (1.0, 0.0, 0.0, 0.0))
     scene.render.filepath = smoke_path
     bpy.ops.render.render(write_still=True)
@@ -114,7 +162,13 @@ def run_demo(
     engine='BLENDER_EEVEE',
     fps=100,
     seed=42,
-    smoke_test=False
+    smoke_test=False,
+    floor_texture=DEFAULT_FLOOR_TEXTURE,
+    crop_uv=None,
+    floor_size: float = 100.0,
+    uv_scale=(1.0, 1.0),
+    uv_rotate_z: float = 0.0,
+    traj_cfg=None,
 ):
     random.seed(seed)
     try:
@@ -131,6 +185,19 @@ def run_demo(
     reset_scene()
     scene = setup_scene(render_resolution=render_resolution, engine=engine, fps=fps)
     camera = ensure_camera(scene)
+    crop = tuple(crop_uv) if crop_uv is not None else (0.0, 0.0, 1.0, 1.0)
+    ensure_sun(scene)
+    sx, sy = uv_scale
+    floor_mat = materials.create_material_with_image(
+        'FloorMaterial',
+        floor_texture,
+        crop_uv=crop,
+        uv_scale=(sx, sy, 1.0),
+        uv_rotation_z=uv_rotate_z,
+    )
+    materials.assign_material(create_floor(size=floor_size), floor_mat)
+    traj = traj_cfg if traj_cfg is not None else trajectories.TrajectoryConfig()
+
     if smoke_test:
         smoke_test_render(scene, camera, output_dir)
         return
@@ -146,14 +213,13 @@ def run_demo(
         f.write('# timestamp tx ty tz qx qy qz qw\n')
 
     while t < duration:
-        pos, quat = trajectories.figure8(t)
+        pos, quat, _vel, _acc = trajectories.figure8(t, traj)
         if t >= next_cam - 1e-9:
             ts = t
             filename = os.path.join(cam_dir, f"{int(ts*1e9):016d}.png")
-            # In Blender: set camera transform and render to filename
-            # Example (to implement): bpy.context.scene.camera.matrix_world = matrix_from_pos_quat(pos, quat)
-            # bpy.context.scene.render.filepath = filename
-            # bpy.ops.render.render(write_still=True)
+            set_camera_pose(camera, pos, quat)
+            scene.render.filepath = filename
+            bpy.ops.render.render(write_still=True)
             export_pose_file(pose_csv, ts, pos, quat)
             next_cam += dt_cam
             frame_idx += 1
@@ -173,6 +239,11 @@ if __name__ == '__main__':
         engine=args.engine,
         fps=args.fps,
         seed=args.seed,
-        smoke_test=args.smoke_test
+        smoke_test=args.smoke_test,
+        floor_texture=args.floor_texture,
+        crop_uv=args.crop_uv,
+        floor_size=args.floor_size,
+        uv_scale=args.uv_scale,
+        uv_rotate_z=args.uv_rotate_z,
     )
 
