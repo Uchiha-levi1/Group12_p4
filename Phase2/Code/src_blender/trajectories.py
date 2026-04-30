@@ -13,9 +13,7 @@ Implementation architecture (designed by Copilot):
 - Each trajectory subclass implements three parametric functions: acceleration, velocity, position.
 - Base class provides get_state(t) for fast O(1) lookups and quaternion computation.
 """
-
 from __future__ import annotations
-
 import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -29,38 +27,37 @@ from scipy.spatial.transform import Rotation
 @dataclass
 class TrajectoryConfig:
     """Configuration for trajectory generation.
-    
+
     Written by: Copilot
     """
-    duration: float = 10.0  # Total trajectory duration in seconds
-    max_velocity: float = 1.0  # Peak velocity (line/square) or constant speed (curves)
+
+    duration: float = 10.0      # Total trajectory duration in seconds
+    max_velocity: float = 1.0   # Peak velocity (line/square) or constant speed (curves)
 
 
 class Trajectory(ABC):
     """Abstract base trajectory class with precomputation and caching.
-    
+
     Design (Myrrh): Trajectories are deterministic motion profiles.
     Implementation (Copilot): Pre-sample at 1000 Hz during init, cache as splines for fast O(1) evaluation.
     """
 
     def __init__(self, duration: float = 10.0, max_velocity: float = 1.0):
         """Initialize trajectory and precompute all parametric functions.
-        
+
         Args:
             duration: Total trajectory time in seconds
             max_velocity: Peak velocity (line/square) or constant speed (curves)
-        
+
         Implementation written by: Copilot
         """
         self.duration = duration
         self.max_velocity = max_velocity
-
-        # Pre-compute all functions at 1000 Hz and cache as splines
         self._precompute_functions()
 
     def _precompute_functions(self):
         """Sample trajectory at 1000 Hz and store as fast interpolants.
-        
+
         Written by: Copilot
         """
         dt = 0.001  # 1000 Hz sample rate
@@ -71,30 +68,21 @@ class Trajectory(ABC):
         positions = []
 
         for t in times:
-            a = self.acceleration_func(t)
-            v = self.velocity_func(t)
-            p = self.position_func(t)
+            accels.append(self.acceleration_func(t))
+            velocities.append(self.velocity_func(t))
+            positions.append(self.position_func(t))
 
-            accels.append(a)
-            velocities.append(v)
-            positions.append(p)
-
-        # Convert to numpy arrays for spline fitting
         accels = np.array(accels)
         velocities = np.array(velocities)
         positions = np.array(positions)
 
-        # Store as cubic spline interpolants for fast O(1) lookup
         self.accel_interp = CubicSpline(times, accels, axis=0)
         self.vel_interp = CubicSpline(times, velocities, axis=0)
         self.pos_interp = CubicSpline(times, positions, axis=0)
 
     @abstractmethod
     def acceleration_func(self, t: float) -> np.ndarray:
-        """Return acceleration (ax, ay, az) at time t.
-
-        Subclass implements specific trajectory shape.
-        """
+        """Return acceleration (ax, ay, az) at time t."""
         pass
 
     @abstractmethod
@@ -111,18 +99,22 @@ class Trajectory(ABC):
         """Return (position, quaternion, velocity, acceleration) at time t.
 
         Fast lookup using precomputed splines. Quaternion derived from velocity and acceleration.
+        Moon altitude offset applied here so position_func stays a pure geometric curve.
 
         Written by: Copilot
         """
-        # Clamp time to valid range
         t = np.clip(t, 0, self.duration - 0.001)
 
         p = self.pos_interp(t)
         v = self.vel_interp(t)
         a = self.accel_interp(t)
 
-        q = self._velocity_accel_to_quaternion(v, a)
+        # Moon.position_func returns pure sphere coords; altitude lives here, not in the curve.
+        # All other trajectories already embed z=2.0 in position_func directly.
+        if isinstance(self, Moon):
+            p = p + np.array([0, 0, 2.0])
 
+        q = self._velocity_accel_to_quaternion(v, a)
         return p, q, v, a
 
     def _velocity_accel_to_quaternion(self, velocity: np.ndarray, accel: np.ndarray) -> np.ndarray:
@@ -134,20 +126,13 @@ class Trajectory(ABC):
         Written by: Copilot
         """
         v_norm = np.linalg.norm(velocity)
-
         if v_norm < 1e-9:
-            # Stationary: return identity quaternion
             return np.array([0, 0, 0, 1])  # [x, y, z, w] format
 
-        # Yaw: angle of velocity in x-y plane
         yaw = np.arctan2(velocity[1], velocity[0])
-
-        # Small roll/pitch tilt based on acceleration
-        # (proportional damping to avoid excessive tilt)
         pitch = np.arcsin(np.clip(accel[2] / (9.81 + 1e-9), -0.3, 0.3)) * 0.1
         roll = np.arcsin(np.clip(-accel[1] / (9.81 + 1e-9), -0.3, 0.3)) * 0.1
 
-        # Convert Euler (roll, pitch, yaw) to quaternion
         rotation = Rotation.from_euler("xyz", [roll, pitch, yaw])
         return rotation.as_quat()  # Returns [x, y, z, w]
 
@@ -177,11 +162,9 @@ class Line(Trajectory):
         Design written by: Myrrh
         Implementation written by: Copilot
         """
-        # Duration breakdown: segment1 + turn + segment2
-        self.seg_duration = (duration - 1.0) / 2  # Each segment ~4.5 sec if duration=10
+        self.seg_duration = (duration - 1.0) / 2   # Each segment ~4.5 sec if duration=10
         self.turn_start = self.seg_duration
         self.turn_end = self.seg_duration + 1.0
-        
         super().__init__(duration, max_velocity)
 
     def acceleration_func(self, t: float) -> np.ndarray:
@@ -190,19 +173,14 @@ class Line(Trajectory):
         Written by: Copilot (implementation of Myrrh's design)
         """
         if t < self.turn_start:
-            # Segment 1: forward motion
             a_mag = self._linear_ramp_accel(t, self.seg_duration)
             return np.array([a_mag, 0, 0])
-
         elif t < self.turn_end:
-            # Turn: stationary, no acceleration
             return np.array([0, 0, 0])
-
         else:
-            # Segment 2: return motion
             seg_t = t - self.turn_end
             a_mag = self._linear_ramp_accel(seg_t, self.seg_duration)
-            return np.array([-a_mag, 0, 0])  # Negative direction
+            return np.array([-a_mag, 0, 0])
 
     def velocity_func(self, t: float) -> np.ndarray:
         """Quadratic velocity profile (integrating linear acceleration).
@@ -210,16 +188,11 @@ class Line(Trajectory):
         Written by: Copilot
         """
         if t < self.turn_start:
-            # Segment 1: forward
             v_mag = self._linear_ramp_velocity(t, self.seg_duration)
             return np.array([v_mag, 0, 0])
-
         elif t < self.turn_end:
-            # Turn: velocity = 0
             return np.array([0, 0, 0])
-
         else:
-            # Segment 2: return
             seg_t = t - self.turn_end
             v_mag = self._linear_ramp_velocity(seg_t, self.seg_duration)
             return np.array([-v_mag, 0, 0])
@@ -229,74 +202,76 @@ class Line(Trajectory):
 
         Written by: Copilot
         """
-        z = 2.0  # Constant altitude (down-facing camera)
-
+        z = 2.0
         if t < self.turn_start:
-            # Segment 1: forward
             x = self._linear_ramp_position(t, self.seg_duration)
             return np.array([x, 0, z])
-
         elif t < self.turn_end:
-            # Turn: stationary at end of segment 1
             x_max = self._linear_ramp_position(self.seg_duration, self.seg_duration)
             return np.array([x_max, 0, z])
-
         else:
-            # Segment 2: return toward origin
             seg_t = t - self.turn_end
             delta_x = self._linear_ramp_position(seg_t, self.seg_duration)
             x_max = self._linear_ramp_position(self.seg_duration, self.seg_duration)
             return np.array([x_max - delta_x, 0, z])
 
     def _linear_ramp_accel(self, t: float, seg_dur: float) -> float:
-        """Linear acceleration: ramp up first half, down second half.
+        """Linear acceleration ramp: up first half, down second half.
+
+        a(t) = a_peak * (t / half),             0 <= t < half
+        a(t) = a_peak * (1 - (t-half) / half),  half <= t < seg_dur
+
+        v_max = ∫₀^half a_peak*(t/half) dt
+              = (a_peak/half) * [t²/2]₀^half
+              = a_peak * half / 2
+        => a_peak = 2*v_max / half
 
         Written by: Copilot
         """
         half = seg_dur / 2
-
+        a_peak = 2 * self.max_velocity / half   # = 4*v_max/seg_dur
         if t < half:
-            # Linear ramp up: a(t) = a_peak * (t / half)
-            a_peak = 2 * self.max_velocity / seg_dur
             return a_peak * (t / half)
         else:
-            # Linear ramp down: a(t) = a_peak * (1 - (t - half) / half)
-            a_peak = 2 * self.max_velocity / seg_dur
             return a_peak * (1 - (t - half) / half)
 
     def _linear_ramp_velocity(self, t: float, seg_dur: float) -> float:
-        """Integrate linear acceleration to get quadratic velocity.
+        """Quadratic velocity from integrating linear acceleration.
 
-        v(t) = ∫a(t)dt
+        v(t) = ∫₀^t a_peak*(s/half) ds
+             = (a_peak / half) * t²/2
+             = (2*v_max/half²) * t²/2
+             = v_max * (t/half)²
+
+        Decel phase is symmetric: v(t) = v_max * (1 - ((t-half)/half)²)
 
         Written by: Copilot
         """
         half = seg_dur / 2
-
         if t < half:
-            # Accel phase: v(t) = (v_max / 2) * (t / half)²
-            return (self.max_velocity / 2) * (t / half) ** 2
+            return self.max_velocity * (t / half) ** 2
         else:
-            # Decel phase: v(t) = v_max - (v_max / 2) * ((t - half) / half)²
-            return self.max_velocity - (self.max_velocity / 2) * ((t - half) / half) ** 2
+            return self.max_velocity * (1 - ((t - half) / half) ** 2)
 
     def _linear_ramp_position(self, t: float, seg_dur: float) -> float:
-        """Integrate quadratic velocity to get cubic position.
+        """Cubic position from integrating quadratic velocity.
 
-        p(t) = ∫v(t)dt
+        p(t) = ∫₀^t v_max*(s/half)² ds
+             = v_max * t³ / (3*half²)
+             = (v_max*half/3) * (t/half)³
+
+        Total segment distance = 2 * (v_max*half/3)  [accel + decel by symmetry]
+
+        Decel phase: p(t) = seg_dist - (v_max*half/3) * ((t-half)/half)³
 
         Written by: Copilot
         """
         half = seg_dur / 2
-
+        seg_dist = 2 * self.max_velocity * half / 3
         if t < half:
-            # Accel phase: p(t) = (v_max / 6) * (t / half)³
-            return (self.max_velocity / 6) * (t / half) ** 3
+            return (self.max_velocity * half / 3) * (t / half) ** 3
         else:
-            # Decel phase: p(t) = v_max*half/2 - (v_max / 6) * ((t - half) / half)³
-            return (self.max_velocity * half / 2) - (self.max_velocity / 6) * (
-                (t - half) / half
-            ) ** 3
+            return seg_dist - (self.max_velocity * half / 3) * ((t - half) / half) ** 3
 
 
 class Square(Trajectory):
@@ -319,11 +294,9 @@ class Square(Trajectory):
         Design written by: Myrrh
         Implementation written by: Copilot
         """
-        # Each cycle: segment + turn
-        self.cycle_duration = (duration - 4.0) / 4  # 4 turns = 4 seconds, divided into 4 cycles
-        self.seg_duration = self.cycle_duration - 1.0
         self.turn_duration = 1.0
-        
+        self.seg_duration = (duration - 4 * self.turn_duration) / 4
+        self.cycle_duration = self.seg_duration + self.turn_duration
         super().__init__(duration, max_velocity)
 
     def acceleration_func(self, t: float) -> np.ndarray:
@@ -331,20 +304,16 @@ class Square(Trajectory):
 
         Written by: Copilot
         """
-        cycle_time = self.seg_duration + self.turn_duration
-        cycle_num = int(t / cycle_time)
-        t_in_cycle = t - cycle_num * cycle_time
+        cycle_num = int(t / self.cycle_duration)
+        t_in_cycle = t - cycle_num * self.cycle_duration
 
-        # Directions for each side: +x, +y, -x, -y
         directions = [(1, 0), (0, 1), (-1, 0), (0, -1)]
         dx, dy = directions[cycle_num % 4]
 
         if t_in_cycle < self.seg_duration:
-            # Motion phase: linear ramp
             a_mag = self._linear_ramp_accel(t_in_cycle, self.seg_duration)
             return np.array([a_mag * dx, a_mag * dy, 0])
         else:
-            # Turn phase: no acceleration
             return np.array([0, 0, 0])
 
     def velocity_func(self, t: float) -> np.ndarray:
@@ -352,9 +321,8 @@ class Square(Trajectory):
 
         Written by: Copilot
         """
-        cycle_time = self.seg_duration + self.turn_duration
-        cycle_num = int(t / cycle_time)
-        t_in_cycle = t - cycle_num * cycle_time
+        cycle_num = int(t / self.cycle_duration)
+        t_in_cycle = t - cycle_num * self.cycle_duration
 
         directions = [(1, 0), (0, 1), (-1, 0), (0, -1)]
         dx, dy = directions[cycle_num % 4]
@@ -366,73 +334,78 @@ class Square(Trajectory):
             return np.array([0, 0, 0])
 
     def position_func(self, t: float) -> np.ndarray:
-        """Position integrating through square perimeter.
+        """Position along square perimeter, accumulating corner offsets.
+
+        Each leg starts from the corner where the previous leg ended:
+        - corner[n] = sum of direction[i] * seg_distance for i in 0..n-1
+        - current pos = corner[cycle_num] + direction[cycle_num] * seg_dist_so_far
 
         Written by: Copilot
         """
         z = 2.0
-
-        cycle_time = self.seg_duration + self.turn_duration
-        cycle_num = int(t / cycle_time)
-        t_in_cycle = t - cycle_num * cycle_time
+        cycle_num = int(t / self.cycle_duration)
+        t_in_cycle = t - cycle_num * self.cycle_duration
 
         directions = [(1, 0), (0, 1), (-1, 0), (0, -1)]
-        dx, dy = directions[cycle_num % 4]
 
-        # Distance per segment
+        seg_distance = self._linear_ramp_position(self.seg_duration, self.seg_duration)
+
+        # Accumulate corner position from all completed legs
+        ox, oy = 0.0, 0.0
+        for i in range(cycle_num):
+            ddx, ddy = directions[i % 4]
+            ox += ddx * seg_distance
+            oy += ddy * seg_distance
+
+        # Current progress within this leg
         if t_in_cycle < self.seg_duration:
             seg_dist = self._linear_ramp_position(t_in_cycle, self.seg_duration)
         else:
-            seg_dist = self._linear_ramp_position(self.seg_duration, self.seg_duration)
+            seg_dist = seg_distance
 
-        # Cumulative distance from previous segments
-        seg_distance = self._linear_ramp_position(self.seg_duration, self.seg_duration)
-        cumulative_dist = cycle_num * seg_distance
-
-        # Current position along the square
-        current_dist = cumulative_dist + seg_dist
-
-        return np.array([dx * current_dist, dy * current_dist, z])
+        dx, dy = directions[cycle_num % 4]
+        return np.array([ox + dx * seg_dist, oy + dy * seg_dist, z])
 
     def _linear_ramp_accel(self, t: float, seg_dur: float) -> float:
         """Linear acceleration ramp.
 
+        a_peak = 2*v_max / half  (see Line._linear_ramp_accel for full derivation)
+
         Written by: Copilot
         """
         half = seg_dur / 2
-
+        a_peak = 2 * self.max_velocity / half
         if t < half:
-            a_peak = 2 * self.max_velocity / seg_dur
             return a_peak * (t / half)
         else:
-            a_peak = 2 * self.max_velocity / seg_dur
             return a_peak * (1 - (t - half) / half)
 
     def _linear_ramp_velocity(self, t: float, seg_dur: float) -> float:
         """Quadratic velocity from linear acceleration.
 
+        v(t) = v_max*(t/half)²  (see Line._linear_ramp_velocity for full derivation)
+
         Written by: Copilot
         """
         half = seg_dur / 2
-
         if t < half:
-            return (self.max_velocity / 2) * (t / half) ** 2
+            return self.max_velocity * (t / half) ** 2
         else:
-            return self.max_velocity - (self.max_velocity / 2) * ((t - half) / half) ** 2
+            return self.max_velocity * (1 - ((t - half) / half) ** 2)
 
     def _linear_ramp_position(self, t: float, seg_dur: float) -> float:
         """Cubic position from quadratic velocity.
 
+        p(t) = (v_max*half/3)*(t/half)³  (see Line._linear_ramp_position for full derivation)
+
         Written by: Copilot
         """
         half = seg_dur / 2
-
+        seg_dist = 2 * self.max_velocity * half / 3
         if t < half:
-            return (self.max_velocity / 6) * (t / half) ** 3
+            return (self.max_velocity * half / 3) * (t / half) ** 3
         else:
-            return (self.max_velocity * half / 2) - (self.max_velocity / 6) * (
-                (t - half) / half
-            ) ** 3
+            return seg_dist - (self.max_velocity * half / 3) * ((t - half) / half) ** 3
 
 
 class Circle(Trajectory):
@@ -444,69 +417,66 @@ class Circle(Trajectory):
     - Completes full circle over trajectory duration
 
     Implementation (Copilot):
-    - Parametric circle: x = R*cos(θ), y = R*sin(θ)
-    - Velocity tangent to circle with constant magnitude
-    - Acceleration is centripetal (perpendicular, pointing toward center)
+    - Parametric circle: x = R*cos(θ), y = R*sin(θ),  θ(t) = 2π*t/T
+    - Velocity tangent to circle with constant magnitude |v| = R*dθ/dt = v_max
+    - Acceleration is centripetal: |a| = v_max²/R, directed toward center
     """
 
-    def __init__(self, duration: float = 10.0, max_velocity: float = 1.0, radius: float = 2.0):
+    def __init__(self, duration: float = 10.0, max_velocity: float = 1.0, radius: float = None):
         """Initialize Circle trajectory.
 
         Args:
             duration: Total time to complete circle
             max_velocity: Constant forward speed
-            radius: Circle radius in meters
+            radius: Circle radius in meters. If None, derived from v_max and duration:
+                    R = v_max * T / (2π), which guarantees |v| = v_max exactly.
+                    If provided, the actual speed will be R*2π/T, not v_max.
+
+        |v| = R * dθ/dt = R * (2π/T) = v_max  =>  R = v_max*T/(2π)
 
         Design written by: Myrrh
         Implementation written by: Copilot
         """
-        self.radius = radius
+        self.radius = radius if radius is not None else max_velocity * duration / (2 * np.pi)
         super().__init__(duration, max_velocity)
 
     def acceleration_func(self, t: float) -> np.ndarray:
         """Centripetal acceleration pointing toward center.
 
-        a = v² / R, directed toward center
+        a(t) = -ω² * p(t),  ω = dθ/dt = 2π/T
+        |a| = v_max² / R  (constant magnitude, direction rotates)
 
         Written by: Copilot
         """
         theta = (t / self.duration) * 2 * np.pi
-
-        # Centripetal acceleration magnitude
         a_mag = (self.max_velocity ** 2) / self.radius
-
-        # Direction: toward center of circle (negative of radial direction)
-        a_x = -a_mag * np.cos(theta)
-        a_y = -a_mag * np.sin(theta)
-
-        return np.array([a_x, a_y, 0])
+        return np.array([-a_mag * np.cos(theta), -a_mag * np.sin(theta), 0])
 
     def velocity_func(self, t: float) -> np.ndarray:
         """Tangent to circle with constant speed.
+
+        v(t) = dp/dt = R*ω * (-sin θ, cos θ)
+        |v| = R*ω = R*(2π/T) = v_max  (constant)
 
         Written by: Copilot
         """
         theta = (t / self.duration) * 2 * np.pi
         dtheta_dt = 2 * np.pi / self.duration
-
-        # Tangent vector (perpendicular to radius)
-        v_x = -self.radius * np.sin(theta) * dtheta_dt
-        v_y = self.radius * np.cos(theta) * dtheta_dt
-
-        return np.array([v_x, v_y, 0])
+        return np.array([
+            -self.radius * np.sin(theta) * dtheta_dt,
+             self.radius * np.cos(theta) * dtheta_dt,
+             0,
+        ])
 
     def position_func(self, t: float) -> np.ndarray:
         """Parametric circle position.
 
+        p(t) = (R*cos θ, R*sin θ, z),  θ = 2π*t/T
+
         Written by: Copilot
         """
         theta = (t / self.duration) * 2 * np.pi
-        z = 2.0
-
-        x = self.radius * np.cos(theta)
-        y = self.radius * np.sin(theta)
-
-        return np.array([x, y, z])
+        return np.array([self.radius * np.cos(theta), self.radius * np.sin(theta), 2.0])
 
 
 class Figure8(Trajectory):
@@ -518,9 +488,9 @@ class Figure8(Trajectory):
     - More complex than circle, loops twice
 
     Implementation (Copilot):
-    - Parametric lemniscate: x = A*sin(u), y = A*sin(u)*cos(u)
-    - Velocity tangent with constant magnitude
-    - Acceleration perpendicular (steering/curvature effect)
+    - Parametric lemniscate: x = A*sin(u), y = A*sin(u)*cos(u),  u = 2π*t/T
+    - Velocity tangent normalized then scaled to v_max (arc-length reparametrization)
+    - Acceleration via central-difference on position_func (d²p/dt² ≈ Δ²p/Δt²)
     """
 
     def __init__(self, duration: float = 10.0, max_velocity: float = 1.0, amplitude: float = 1.0):
@@ -538,63 +508,57 @@ class Figure8(Trajectory):
         super().__init__(duration, max_velocity)
 
     def acceleration_func(self, t: float) -> np.ndarray:
-        """Curvature-based acceleration (steering toward path center).
+        """Second derivative of position via central difference.
+
+        a(t) ≈ (p(t+ε) - 2p(t) + p(t-ε)) / ε²
+
+        Differencing position_func (not velocity_func) avoids spikes near the
+        lemniscate crossover where the tangent normalization denominator → 0.
 
         Written by: Copilot
         """
-        # Get current velocity direction
-        v = self.velocity_func(t)
-        v_norm = np.linalg.norm(v)
-
-        if v_norm < 1e-9:
-            return np.array([0, 0, 0])
-
-        # Compute curvature by numerical differentiation of velocity
         eps = 0.0001
-        v_plus = self.velocity_func(t + eps)
-        v_minus = self.velocity_func(t - eps)
-
-        dv_dt = (v_plus - v_minus) / (2 * eps)
-        a = dv_dt
-
-        return a
+        t_lo = max(t - eps, 0)
+        t_hi = min(t + eps, self.duration)
+        return (
+            self.position_func(t_hi)
+            - 2 * self.position_func(t)
+            + self.position_func(t_lo)
+        ) / (eps ** 2)
 
     def velocity_func(self, t: float) -> np.ndarray:
-        """Tangent to figure-8 with constant speed.
+        """Tangent to lemniscate, scaled to constant speed.
+
+        Raw tangent: dp/du = A*(cos u, cos 2u, 0)
+        Arc-length reparametrisation: v = v_max * (dp/du) / |dp/du|
+        => |v| = v_max  at all t, even where curvature varies.
 
         Written by: Copilot
         """
         u = (t / self.duration) * 2 * np.pi
-        du_dt = 2 * np.pi / self.duration
-
-        # Derivatives of lemniscate parametric form
-        # x = A*sin(u)
-        # y = A*sin(u)*cos(u)
-        dx_du = self.amplitude * np.cos(u)
-        dy_du = self.amplitude * (np.cos(2 * u))  # d/du[sin(u)*cos(u)]
-
-        # Tangent vector
-        tangent = np.array([dx_du, dy_du, 0])
+        tangent = np.array([
+            self.amplitude * np.cos(u),
+            self.amplitude * np.cos(2 * u),   # d/du[sin(u)*cos(u)] = cos(2u)
+            0,
+        ])
         tangent_mag = np.linalg.norm(tangent)
-
         if tangent_mag > 1e-9:
             tangent = tangent / tangent_mag
-
-        # Scale by constant speed
         return self.max_velocity * tangent
 
     def position_func(self, t: float) -> np.ndarray:
         """Parametric lemniscate position.
 
+        p(t) = (A*sin u, A*sin u * cos u, z),  u = 2π*t/T
+
         Written by: Copilot
         """
         u = (t / self.duration) * 2 * np.pi
-        z = 2.0
-
-        x = self.amplitude * np.sin(u)
-        y = self.amplitude * np.sin(u) * np.cos(u)
-
-        return np.array([x, y, z])
+        return np.array([
+            self.amplitude * np.sin(u),
+            self.amplitude * np.sin(u) * np.cos(u),
+            2.0,
+        ])
 
 
 class Moon(Trajectory):
@@ -607,8 +571,9 @@ class Moon(Trajectory):
 
     Implementation (Copilot):
     - Parametric 3D curve: spherical lemniscate
-    - Constant speed along tangent direction
-    - Acceleration for curvature following
+    - position_func returns pure sphere coords (no altitude offset)
+    - Flight altitude z=2.0 added in get_state so velocity stays consistent with position
+    - Acceleration via central-difference on position_func, same as Figure8
     """
 
     def __init__(self, duration: float = 10.0, max_velocity: float = 1.0, radius: float = 1.5):
@@ -626,51 +591,53 @@ class Moon(Trajectory):
         super().__init__(duration, max_velocity)
 
     def acceleration_func(self, t: float) -> np.ndarray:
-        """Curvature-based acceleration (3D steering).
+        """Second derivative of position via central difference.
+
+        a(t) ≈ (p(t+ε) - 2p(t) + p(t-ε)) / ε²
 
         Written by: Copilot
         """
-        # Numerical differentiation of velocity
         eps = 0.0001
-        v_plus = self.velocity_func(t + eps)
-        v_minus = self.velocity_func(t - eps)
-
-        a = (v_plus - v_minus) / (2 * eps)
-        return a
+        t_lo = max(t - eps, 0)
+        t_hi = min(t + eps, self.duration)
+        return (
+            self.position_func(t_hi)
+            - 2 * self.position_func(t)
+            + self.position_func(t_lo)
+        ) / (eps ** 2)
 
     def velocity_func(self, t: float) -> np.ndarray:
-        """Tangent to 3D lemniscate with constant speed.
+        """Tangent to 3D lemniscate, scaled to constant speed.
+
+        Raw tangent: dp/du = R*(cos u, cos 2u, -0.5*sin u)
+        Arc-length reparametrisation: v = v_max * (dp/du) / |dp/du|
 
         Written by: Copilot
         """
         u = (t / self.duration) * 2 * np.pi
-        du_dt = 2 * np.pi / self.duration
-
-        # Parametric derivatives (spherical lemniscate)
-        # x = R*sin(u)
-        # y = R*sin(u)*cos(u)
-        # z = R*0.5*cos(u)
-        dx_du = self.radius * np.cos(u)
-        dy_du = self.radius * np.cos(2 * u)
-        dz_du = -self.radius * 0.5 * np.sin(u)
-
-        tangent = np.array([dx_du, dy_du, dz_du])
+        tangent = np.array([
+            self.radius * np.cos(u),
+            self.radius * np.cos(2 * u),
+            -self.radius * 0.5 * np.sin(u),
+        ])
         tangent_mag = np.linalg.norm(tangent)
-
         if tangent_mag > 1e-9:
             tangent = tangent / tangent_mag
-
         return self.max_velocity * tangent
 
     def position_func(self, t: float) -> np.ndarray:
-        """Parametric 3D lemniscate (spherical crescent).
+        """Pure spherical lemniscate position (no altitude offset).
+
+        p(t) = (R*sin u, R*sin u * cos u, R*0.5*cos u),  u = 2π*t/T
+
+        Altitude offset z=2.0 is applied in get_state, keeping velocity_func
+        and position_func consistent (d/dt of position_func = velocity_func).
 
         Written by: Copilot
         """
         u = (t / self.duration) * 2 * np.pi
-
-        x = self.radius * np.sin(u)
-        y = self.radius * np.sin(u) * np.cos(u)
-        z = 2.0 + 0.5 * self.radius * np.cos(u)  # Offset for altitude
-
-        return np.array([x, y, z])
+        return np.array([
+            self.radius * np.sin(u),
+            self.radius * np.sin(u) * np.cos(u),
+            self.radius * 0.5 * np.cos(u),
+        ])
