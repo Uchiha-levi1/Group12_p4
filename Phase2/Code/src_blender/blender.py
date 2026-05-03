@@ -220,6 +220,9 @@ def run_demo(
     reset_scene()
     scene = setup_scene(render_resolution=render_resolution, engine=engine, fps=fps)
     camera = ensure_camera(scene)
+    camera.data.lens_unit = 'FOV'
+    camera.data.sensor_fit = 'HORIZONTAL'
+    camera.data.angle = 1.57
     crop = tuple(crop_uv) if crop_uv is not None else (0.0, 0.0, 1.0, 1.0)
     ensure_sun(scene)
     sx, sy = uv_scale
