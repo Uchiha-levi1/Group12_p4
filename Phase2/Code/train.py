@@ -99,19 +99,19 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_root', type=str, default='./phase2_data')
     parser.add_argument('--out_dir', type=str, default='./io_lstm_run')
-    parser.add_argument('--epochs', type=int, default=80)
+    parser.add_argument('--epochs', type=int, default=40)
     parser.add_argument('--batch_size', type=int, default=256)
-    parser.add_argument('--lr', type=float, default=1e-3)
+    parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--weight_decay', type=float, default=1e-5)
     parser.add_argument('--grad_clip', type=float, default=1.0)
     parser.add_argument('--lambda_p', type=float, default=1.0)
-    parser.add_argument('--lambda_r', type=float, default=5.0)
+    parser.add_argument('--lambda_r', type=float, default=1.0)
     parser.add_argument('--window', type=int, default=100)
     parser.add_argument('--train_stride', type=int, default=50)
     parser.add_argument('--eval_stride', type=int, default=100)
     parser.add_argument('--num_workers', type=int, default=4)
     parser.add_argument('--seed', type=int, default=42)
-    parser.add_argument('--lr_decay_epochs', type=int, nargs='+', default=[30, 45])
+    parser.add_argument('--lr_decay_epochs', type=int, nargs='+', default=[10, 20, 30])
     parser.add_argument('--lr_decay_factor', type=float, default=0.1)
     parser.add_argument('--ckpt_every', type=int, default=10)
     parser.add_argument('--val_ate_every', type=int, default=10)
@@ -134,6 +134,19 @@ def main():
         print(f"GPU: {torch.cuda.get_device_name(0)}")
         torch.backends.cudnn.benchmark = True
 
+    # ---------- Load IMU normalization stats ----------
+    meta_path = os.path.join(args.data_root, 'dataset_meta.json')
+    with open(meta_path, 'r') as f:
+        dataset_meta = json.load(f)
+    if 'imu_norm_stats' not in dataset_meta:
+        raise RuntimeError(
+            f"'imu_norm_stats' missing from {meta_path}. "
+            "Run: python compute_imu_stats.py --data_root " + args.data_root
+        )
+    imu_mean = np.array(dataset_meta['imu_norm_stats']['mean'], dtype=np.float32)
+    imu_std = np.array(dataset_meta['imu_norm_stats']['std'], dtype=np.float32)
+    print(f"IMU norm stats loaded: mean={imu_mean.tolist()}, std={imu_std.tolist()}")
+
     # ---------- Sanity check oracle on first val trajectory ----------
     val_dir = os.path.join(args.data_root, 'val')
     from glob import glob
@@ -141,7 +154,8 @@ def main():
     if val_folders:
         sanity = oracle_dead_reckon(val_folders[0],
                                     window_size=args.window,
-                                    stride=args.eval_stride)
+                                    stride=args.eval_stride,
+                                    imu_mean=imu_mean, imu_std=imu_std)
         print(f"Oracle dead-reckoning sanity (val/traj_000):")
         print(f"  max position error  = {sanity['max_err']:.6f} m")
         print(f"  mean position error = {sanity['mean_err']:.6f} m")
@@ -151,10 +165,12 @@ def main():
     train_set = IODataset(
         os.path.join(args.data_root, 'train'),
         window_size=args.window, stride=args.train_stride,
+        imu_mean=imu_mean, imu_std=imu_std,
     )
     val_set_window = IODataset(
         os.path.join(args.data_root, 'val'),
         window_size=args.window, stride=args.eval_stride,
+        imu_mean=imu_mean, imu_std=imu_std,
     )
     print(f"Train windows: {len(train_set)}")
     print(f"Val windows  : {len(val_set_window)}")
@@ -217,6 +233,7 @@ def main():
             results = evaluate_dataset(
                 model, os.path.join(args.data_root, 'val'), device,
                 window_size=args.window, stride=args.eval_stride,
+                imu_mean=imu_mean, imu_std=imu_std,
             )
             ates = [r['rmse_ate'] for r in results]
             val_mean_ate = float(np.mean(ates))
@@ -253,9 +270,9 @@ def main():
         print(f"[{epoch:3d}/{args.epochs}] "
               f"lr={lr_now:.1e}  "
               f"train: total={train_metrics['total']:.4f} "
-              f"(L1={train_metrics['trans']:.4f}, geo={train_metrics['rot']:.4f})  "
+              f"(pos_L={train_metrics['trans']:.4f}, geo={train_metrics['rot']:.4f})  "
               f"val: total={val_metrics['total']:.4f} "
-              f"(L1={val_metrics['trans']:.4f}, geo={val_metrics['rot']:.4f})  "
+              f"(pos_L={val_metrics['trans']:.4f}, geo={val_metrics['rot']:.4f})  "
               f"[{epoch_time:.1f}s]")
 
         csv_log.write(f"{epoch},{lr_now},"
