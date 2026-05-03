@@ -1,0 +1,18 @@
+# Phase 2 host Python (Code/). Blender scripts use the interpreter inside Blender;
+# they are not installed via this file (bpy, mathutils).
+
+# Trajectory generation (traj_gen_v4.py, v3) and deep VIO stack
+numpy>=1.24
+scipy>=1.10
+matplotlib>=3.7
+minsnap-trajectories>=0.1.1
+
+# IMU noise (acc_gen, gyro_gen) — install from source (not on PyPI as gnss_ins_sim)
+gnss-ins-sim @ git+https://github.com/Aceinna/gnss-ins-sim.git
+
+# Training / eval
+torch>=2.0
+tensorboard>=2.14
+
+# Utilities
+scikit-image>=0.21
