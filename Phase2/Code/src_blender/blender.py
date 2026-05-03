@@ -16,7 +16,7 @@ PHASE2_ROOT = os.path.abspath(os.path.join(THIS_DIR, '..', '..'))
 DEFAULT_FLOOR_TEXTURE = os.path.join(
     PHASE2_ROOT,
     'static',
-    '502417451_24426942323561828_9163875266620398845_n.jpg',
+    'austin-scherbarth-qSrFTyh-IB0-unsplash.jpg'
 )
 
 try:
@@ -38,7 +38,7 @@ def parse_args(argv=None):
         user_argv = argv[argv.index('--') + 1:]
 
     parser = argparse.ArgumentParser(description="Phase 2 Blender data generator")
-    parser.add_argument('--output_dir', default='/tmp/phase2_out')
+    parser.add_argument('--output_dir', default=os.path.join(PHASE2_ROOT, 'static', './tmp/'))
     parser.add_argument('--duration', type=float, default=5.0)
     parser.add_argument('--imu_rate', type=float, default=200.0)
     parser.add_argument('--cam_rate', type=float, default=20.0)
@@ -66,6 +66,13 @@ def parse_args(argv=None):
     parser.add_argument('--uv_scale', nargs=2, type=float, default=[1.0, 1.0],
                         metavar=('SX', 'SY'))
     parser.add_argument('--uv_rotate_z', type=float, default=0.0)
+    parser.add_argument(
+          '--motion_mode',
+          choices=['trajectory', 'preview_diagonal'],
+          default='trajectory',
+          help='Use the existing trajectory path or a simple diagonal preview motion',
+      )
+
     return parser.parse_args(user_argv)
 
 
@@ -96,10 +103,10 @@ def setup_scene(render_resolution=(640, 480), engine='BLENDER_EEVEE', fps=100):
     return scene
 
 
-def ensure_camera(scene, location=(0.0, 0.0, 3.0), euler_xyz=(3.14159, 0.0, 0.0)):
+def ensure_camera(scene, location=(0.0, 0.0, 3.0), euler_xyz=(0.0, 0.0, 0.0)):
     """Create camera if needed and make it active.
 
-    Convention: default Euler (pi, 0, 0) points the camera downward (−Z) at the XY floor plane.
+    Convention: default Euler (0, 0, 0) points the camera downward (−Z) at the XY floor plane.
     """
     cam = next((obj for obj in scene.objects if obj.type == 'CAMERA'), None)
     if cam is None:
@@ -135,13 +142,40 @@ def set_camera_pose(camera, position, quaternion_xyzw):
     qx, qy, qz, qw = quaternion_xyzw
     camera.rotation_quaternion = Quaternion((qw, qx, qy, qz))
 
+def preview_diagonal_pose(
+      t,
+      duration,
+      floor_size,
+      z=3.0,
+      margin_ratio=0.15,
+  ):
+      """Simple placeholder VO motion: fixed camera translating diagonally across most of the floor."""
+      if duration <= 0.0:
+          s = 0.0
+      else:
+          s = max(0.0, min(1.0, t / duration))
+
+      half_extent = floor_size * 0.5
+      margin = floor_size * margin_ratio
+      usable = max(0.0, half_extent - margin)
+
+      start_x, start_y = -usable, -usable
+      end_x, end_y = usable, usable
+
+      x = start_x + s * (end_x - start_x)
+      y = start_y + s * (end_y - start_y)
+
+      position = (x, y, z)
+      quaternion_xyzw = (0.0, 0.0, 0.0, 1.0)
+      return position, quaternion_xyzw
+
 
 def smoke_test_render(scene, camera, output_dir):
     """Render a single frame to validate pipeline wiring."""
     os.makedirs(output_dir, exist_ok=True)
     smoke_path = os.path.join(output_dir, "smoke_test.png")
-    # Quaternion xyzw: 180° about X => nadir view (+Z camera looks along −Z).
-    set_camera_pose(camera, (0.0, 0.0, 3.0), (1.0, 0.0, 0.0, 0.0))
+    # Quaternion xyzw identity => Blender camera default forward axis looks along −Z.
+    set_camera_pose(camera, (0.0, 0.0, 3.0), (0.0, 0.0, 0.0, 1.0))
     scene.render.filepath = smoke_path
     bpy.ops.render.render(write_still=True)
     print(f"Smoke test render written to {smoke_path}")
@@ -169,6 +203,7 @@ def run_demo(
     uv_scale=(1.0, 1.0),
     uv_rotate_z: float = 0.0,
     traj_cfg=None,
+    motion_mode='trajectory'
 ):
     random.seed(seed)
     try:
@@ -212,6 +247,21 @@ def run_demo(
     with open(pose_csv, 'w') as f:
         f.write('# timestamp tx ty tz qx qy qz qw\n')
 
+    if motion_mode == 'preview_diagonal':
+        while t < duration:
+            ts = t
+            pos, quat = preview_diagonal_pose(ts, duration, floor_size)
+            filename = os.path.join(cam_dir, f"{int(ts*1e9):016d}.png")
+            set_camera_pose(camera, pos, quat)
+            scene.render.filepath = filename
+            bpy.ops.render.render(write_still=True)
+            export_pose_file(pose_csv, ts, pos, quat)
+            frame_idx += 1
+            t += dt_cam
+
+        print(f"Wrote {frame_idx} frames to {cam_dir}")
+        return
+
     while t < duration:
         pos, quat, _vel, _acc = trajectories.figure8(t, traj)
         if t >= next_cam - 1e-9:
@@ -245,5 +295,6 @@ if __name__ == '__main__':
         floor_size=args.floor_size,
         uv_scale=args.uv_scale,
         uv_rotate_z=args.uv_rotate_z,
+        motion_mode=args.motion_mode
     )
 

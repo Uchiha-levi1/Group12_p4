@@ -19,6 +19,14 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Tuple
 
+try:
+    from .ensure_installed import ensure_installed
+except ImportError:
+    from ensure_installed import ensure_installed  # type: ignore
+
+ensure_installed("numpy")
+ensure_installed("scipy")
+
 import numpy as np
 from scipy.interpolate import CubicSpline
 from scipy.spatial.transform import Rotation
