@@ -1,7 +1,12 @@
 Data/
+
 results/
 imu/
 io_lstm_run/
 __pycache__/
 trajectory/
 phase2_data/
+
+.DS_Store
+__pycache__/
+
