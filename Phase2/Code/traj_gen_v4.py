@@ -918,7 +918,7 @@ if __name__ == '__main__':
     parser.add_argument('--mode', choices=['single', 'dataset'], default='dataset')
     parser.add_argument('--out', type=str, default='./phase2_data')
     parser.add_argument('--seed', type=int, default=42)
-    parser.add_argument('--n_train', type=int, default=50)
+    parser.add_argument('--n_train', type=int, default=100)
     parser.add_argument('--n_val', type=int, default=10)
     parser.add_argument('--n_test', type=int, default=10)
     args = parser.parse_args()
