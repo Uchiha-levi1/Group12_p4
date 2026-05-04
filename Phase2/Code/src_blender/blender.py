@@ -20,7 +20,7 @@ DEFAULT_OUTPUT_DIR = os.path.join(
 DEFAULT_FLOOR_TEXTURE = os.path.join(
     PHASE2_ROOT,
     'static',
-    'austin-scherbarth-qSrFTyh-IB0-unsplash.jpg'
+    'Wheres-Waldo-Space-Station-Super-High-Resolution-scaled.jpg',
 )
 
 TRAJECTORY_CSV_NAME = 'trajectory.csv'
