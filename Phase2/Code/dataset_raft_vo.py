@@ -52,7 +52,15 @@ def _load_groundtruth(csv_path: Path) -> dict[int, np.ndarray]:
             parts = line.split(",") if "," in line else line.split()
             if len(parts) < 8:
                 continue
-            ts = int(parts[0])
+            ts_raw = parts[0]
+            # Support both:
+            # 1) nanosecond-style integer timestamps (e.g. 1234567890000000000)
+            # 2) second-style float timestamps from blender groundtruth.csv
+            #    (e.g. 0.000000000, 0.100000000)
+            if "." in ts_raw or "e" in ts_raw.lower():
+                ts = int(round(float(ts_raw) * 1e9))
+            else:
+                ts = int(ts_raw)
             vals = np.array([float(v) for v in parts[1:8]], dtype=np.float64)
             poses[ts] = vals
     return poses
@@ -92,6 +100,8 @@ class Trajectory:
         gt_path = traj_dir / "groundtruth.csv"
         gt_dict = _load_groundtruth(gt_path)
         gt_keys = sorted(gt_dict.keys())
+        if len(gt_keys) == 0:
+            raise ValueError(f"No valid GT rows found in {gt_path}")
 
         # Align each image timestamp to nearest GT
         self.frames: list[tuple[Path, np.ndarray]] = []
