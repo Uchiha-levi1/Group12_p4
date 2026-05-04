@@ -29,6 +29,7 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from tqdm.auto import tqdm
 
 from dataset_raft_vo import RAFTVODataset
@@ -157,8 +158,11 @@ def main() -> None:
 
     run_dir   = Path(args.run_dir)
     ckpt_dir  = run_dir / "checkpoints"
+    tb_dir    = run_dir / "tensorboard"
     run_dir.mkdir(parents=True, exist_ok=True)
     ckpt_dir.mkdir(parents=True, exist_ok=True)
+    tb_dir.mkdir(parents=True, exist_ok=True)
+    writer = SummaryWriter(log_dir=str(tb_dir))
 
     # Save config
     config = vars(args)
@@ -221,6 +225,7 @@ def main() -> None:
     print(f"  Training for {args.epochs} epochs")
     print(f"  Train samples: {len(train_ds)} | Val samples: {len(val_ds)}")
     print(f"  Checkpoints → {ckpt_dir}")
+    print(f"  TensorBoard → {tb_dir}")
     print(f"{'='*60}\n")
 
     for epoch in range(start_epoch, start_epoch + args.epochs):
@@ -237,6 +242,12 @@ def main() -> None:
 
         scheduler.step(val_loss)
         elapsed = time.time() - t0
+        lr_now = optimizer.param_groups[0]["lr"]
+
+        writer.add_scalar("lr", lr_now, epoch)
+        writer.add_scalar("loss/train", train_loss, epoch)
+        writer.add_scalar("loss/val", val_loss, epoch)
+        writer.add_scalar("time/epoch_s", elapsed, epoch)
 
         print(f"[Epoch {epoch:04d}] train={train_loss:.6f}  "
               f"val={val_loss:.6f}  ({elapsed:.1f}s)")
@@ -261,6 +272,7 @@ def main() -> None:
             state["best_val_loss"] = best_val_loss
             save_checkpoint(state, ckpt_dir, "best.pt")
             print(f"  ↳ New best val loss: {best_val_loss:.6f} — saved best.pt")
+            writer.add_scalar("loss/best_val", best_val_loss, epoch)
 
         # Periodic checkpoint
         if args.save_every > 0 and (epoch + 1) % args.save_every == 0:
@@ -272,6 +284,7 @@ def main() -> None:
 
     print(f"\nTraining complete. Best val loss: {best_val_loss:.6f}")
     print(f"Checkpoints saved to: {ckpt_dir}")
+    writer.close()
 
 
 if __name__ == "__main__":
