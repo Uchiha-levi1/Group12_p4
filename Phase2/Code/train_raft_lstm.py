@@ -29,6 +29,7 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+from tqdm.auto import tqdm
 
 from dataset_raft_vo import RAFTVODataset
 from model_raft_lstm import RAFTLSTMVOModel
@@ -71,12 +72,18 @@ def run_epoch(
     optimizer: torch.optim.Optimizer | None,
     device: torch.device,
     is_train: bool,
+    epoch: int | None = None,
 ) -> float:
     model.train(is_train)
     total_loss = 0.0
 
+    desc = "train" if is_train else "val"
+    if epoch is not None:
+        desc = f"epoch {epoch:04d} {desc}"
+    pbar = tqdm(loader, desc=desc, leave=False, dynamic_ncols=True)
+
     with torch.set_grad_enabled(is_train):
-        for batch in loader:
+        for batch in pbar:
             images  = batch["images"].to(device)   # (B, L+1, 3, H, W)
             targets = batch["targets"].to(device)  # (B, L, 6)
 
@@ -89,7 +96,9 @@ def run_epoch(
                 nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
                 optimizer.step()
 
-            total_loss += loss.item()
+            loss_val = loss.item()
+            total_loss += loss_val
+            pbar.set_postfix(loss=f"{loss_val:.5f}")
 
     return total_loss / max(len(loader), 1)
 
@@ -217,10 +226,14 @@ def main() -> None:
     for epoch in range(start_epoch, start_epoch + args.epochs):
         t0 = time.time()
 
-        train_loss = run_epoch(model, train_loader, criterion,
-                               optimizer, device, is_train=True)
-        val_loss   = run_epoch(model, val_loader,   criterion,
-                               None,      device, is_train=False)
+        train_loss = run_epoch(
+            model, train_loader, criterion, optimizer, device,
+            is_train=True, epoch=epoch
+        )
+        val_loss = run_epoch(
+            model, val_loader, criterion, None, device,
+            is_train=False, epoch=epoch
+        )
 
         scheduler.step(val_loss)
         elapsed = time.time() - t0
