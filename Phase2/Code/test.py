@@ -6,8 +6,8 @@ plots predicted vs GT (raw and SE(3)-aligned), writes per-trajectory
 and aggregate ATE to a JSON + CSV.
 
 Usage:
-    python test.py --data_root ./phase2_data --run_dir ./io_lstm_run
-    python test.py --data_root ./phase2_data --run_dir ./io_lstm_run \
+    python test.py --data_root ../static/tmp/phase2_data --run_dir ./io_lstm_run
+    python test.py --data_root ../static/tmp/phase2_data --run_dir ./io_lstm_run \
                    --ckpt ./io_lstm_run/checkpoints/best.pt
 """
 
@@ -25,6 +25,9 @@ from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (registers 3d projection)
 
 from model import BiLSTM_IO
 from eval import evaluate_trajectory
+
+_PHASE2_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+DEFAULT_DATA_ROOT = os.path.join(_PHASE2_ROOT, 'static', 'tmp', 'phase2_data')
 
 
 def get_device():
@@ -145,7 +148,7 @@ def plot_summary_bar(per_traj: list, out_path: str):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--data_root', type=str, default='./phase2_data')
+    parser.add_argument('--data_root', type=str, default=DEFAULT_DATA_ROOT)
     parser.add_argument('--run_dir', type=str, default='./io_lstm_run')
     parser.add_argument('--ckpt', type=str, default=None,
                         help='checkpoint path; defaults to <run_dir>/checkpoints/best.pt')

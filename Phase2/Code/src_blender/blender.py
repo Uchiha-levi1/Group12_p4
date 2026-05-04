@@ -13,6 +13,10 @@ if THIS_DIR not in sys.path:
     sys.path.insert(0, THIS_DIR)
 
 PHASE2_ROOT = os.path.abspath(os.path.join(THIS_DIR, '..', '..'))
+# Dataset lives under static/tmp after moving phase2_data; default renders one train split.
+DEFAULT_OUTPUT_DIR = os.path.join(
+    PHASE2_ROOT, 'static', 'tmp', 'phase2_data', 'train', 'traj_000'
+)
 DEFAULT_FLOOR_TEXTURE = os.path.join(
     PHASE2_ROOT,
     'static',
@@ -87,7 +91,11 @@ def parse_args(argv=None):
         user_argv = argv[argv.index('--') + 1:]
 
     parser = argparse.ArgumentParser(description="Phase 2 Blender data generator")
-    parser.add_argument('--output_dir', default=os.path.join(PHASE2_ROOT, 'static', './tmp/'))
+    parser.add_argument(
+        '--output_dir',
+        default=DEFAULT_OUTPUT_DIR,
+        help='Renders and groundtruth go here; must contain trajectory.csv (default: train/traj_000)',
+    )
     parser.add_argument('--width', type=int, default=640)
     parser.add_argument('--height', type=int, default=480)
     parser.add_argument('--engine', default='BLENDER_EEVEE')
@@ -204,7 +212,7 @@ def export_pose_file(path, timestamp, position, quaternion_xyzw):
 
 
 def run_demo(
-    output_dir: str = '/tmp/phase2_out',
+    output_dir: str = DEFAULT_OUTPUT_DIR,
     render_resolution=(640, 480),
     engine='BLENDER_EEVEE',
     fps=100,

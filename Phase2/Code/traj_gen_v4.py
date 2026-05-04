@@ -40,6 +40,9 @@ from scipy.spatial.transform import Rotation as R
 from gnss_ins_sim.pathgen.pathgen import acc_gen, gyro_gen
 from gnss_ins_sim.sim.imu_model import IMU as GnssIMU
 
+_PHASE2_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+DEFAULT_TRAJ_DATA_ROOT = os.path.join(_PHASE2_ROOT, 'static', 'tmp', 'phase2_data')
+
 # ============================================================
 # FIXED CONFIG (same for all trajectories)
 # ============================================================
@@ -916,7 +919,7 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', choices=['single', 'dataset'], default='dataset')
-    parser.add_argument('--out', type=str, default='./phase2_data')
+    parser.add_argument('--out', type=str, default=DEFAULT_TRAJ_DATA_ROOT)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--n_train', type=int, default=100)
     parser.add_argument('--n_val', type=int, default=10)

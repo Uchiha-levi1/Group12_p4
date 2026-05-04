@@ -2,7 +2,7 @@
 Train Bi-LSTM IO model.
 
 Usage:
-    python train.py --data_root ./phase2_data --out_dir ./io_lstm_run
+    python train.py --data_root ../static/tmp/phase2_data --out_dir ./io_lstm_run
 
 Notes:
     - Window 100, stride 50 (train) / 100 (eval)
@@ -33,6 +33,9 @@ from dataset import IODataset
 from model import BiLSTM_IO
 from losses import io_loss
 from eval import evaluate_dataset, oracle_dead_reckon
+
+_PHASE2_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+DEFAULT_DATA_ROOT = os.path.join(_PHASE2_ROOT, 'static', 'tmp', 'phase2_data')
 
 
 def set_seed(seed: int):
@@ -97,7 +100,7 @@ def validate_per_window(model, loader, device, lambda_p, lambda_r):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--data_root', type=str, default='./phase2_data')
+    parser.add_argument('--data_root', type=str, default=DEFAULT_DATA_ROOT)
     parser.add_argument('--out_dir', type=str, default='./io_lstm_run')
     parser.add_argument('--epochs', type=int, default=40)
     parser.add_argument('--batch_size', type=int, default=256)
