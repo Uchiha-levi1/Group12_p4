@@ -12,7 +12,9 @@ gnss-ins-sim @ git+https://github.com/Aceinna/gnss-ins-sim.git
 
 # Training / eval
 torch>=2.0
+torchvision>=0.15
 tensorboard>=2.14
+Pillow>=9.0
 
 # Utilities
 scikit-image>=0.21
