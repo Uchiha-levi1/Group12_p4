@@ -2,7 +2,7 @@
 Train Bi-LSTM IO model.
 
 Usage:
-    python train.py --data_root ../static/tmp/phase2_data --out_dir ./io_lstm_run
+    python train.py --data_root ../static/phase2_data --out_dir ./io_lstm_run
 
 Notes:
     - Window 100, stride 50 (train) / 100 (eval)
@@ -35,7 +35,7 @@ from losses import io_loss
 from eval import evaluate_dataset, oracle_dead_reckon
 
 _PHASE2_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-DEFAULT_DATA_ROOT = os.path.join(_PHASE2_ROOT, 'static', 'tmp', 'phase2_data')
+DEFAULT_DATA_ROOT = os.path.join(_PHASE2_ROOT, 'static', 'phase2_data')
 
 
 def set_seed(seed: int):

@@ -6,8 +6,8 @@ plots predicted vs GT (raw and SE(3)-aligned), writes per-trajectory
 and aggregate ATE to a JSON + CSV.
 
 Usage:
-    python test.py --data_root ../static/tmp/phase2_data --run_dir ./io_lstm_run
-    python test.py --data_root ../static/tmp/phase2_data --run_dir ./io_lstm_run \
+    python test.py --data_root ../static/phase2_data --run_dir ./io_lstm_run
+    python test.py --data_root ../static/phase2_data --run_dir ./io_lstm_run \
                    --ckpt ./io_lstm_run/checkpoints/best.pt
 """
 
@@ -27,7 +27,7 @@ from model import BiLSTM_IO
 from eval import evaluate_trajectory
 
 _PHASE2_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-DEFAULT_DATA_ROOT = os.path.join(_PHASE2_ROOT, 'static', 'tmp', 'phase2_data')
+DEFAULT_DATA_ROOT = os.path.join(_PHASE2_ROOT, 'static', 'phase2_data')
 
 
 def get_device():

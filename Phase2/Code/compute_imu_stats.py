@@ -2,7 +2,7 @@
 Compute per-channel mean and std from all train IMU data.
 
 Run after traj_gen_v4.py, before train.py:
-    python compute_imu_stats.py --data_root ../static/tmp/phase2_data
+    python compute_imu_stats.py --data_root ../static/phase2_data
 
 Writes 'imu_norm_stats' into dataset_meta.json.
 """
@@ -15,7 +15,7 @@ import numpy as np
 from glob import glob
 
 _PHASE2_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-DEFAULT_DATA_ROOT = os.path.join(_PHASE2_ROOT, 'static', 'tmp', 'phase2_data')
+DEFAULT_DATA_ROOT = os.path.join(_PHASE2_ROOT, 'static', 'phase2_data')
 
 IMU_ACCEL = slice(1, 4) # only values with noise 
 IMU_GYRO = slice(4, 7) 
